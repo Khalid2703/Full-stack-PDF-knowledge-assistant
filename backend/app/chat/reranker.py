@@ -1,35 +1,58 @@
 """
 Reranking engine for improved retrieval accuracy
-Uses cross-encoder or scoring-based reranking
+Uses Gemini embeddings for semantic relevance scoring
 """
 
 from typing import List, Dict
-from sentence_transformers import CrossEncoder
+import google.generativeai as genai
+import numpy as np
 from app.utils.logger import app_logger
 from app.config import settings
-import numpy as np
 
 
 class Reranker:
     """
     Reranking service to improve retrieval accuracy
-    Uses cross-encoder for semantic relevance scoring
+    Uses Gemini embeddings for semantic relevance scoring
     """
     
     def __init__(self):
-        """Initialize reranker with cross-encoder model"""
-        self.model = None
-        self.use_cross_encoder = True
+        """Initialize reranker with Gemini API"""
+        self.enabled = False
+        self.model_name = "models/embedding-001"
         
         try:
-            # Load cross-encoder model (lightweight)
-            app_logger.info("Loading cross-encoder model for reranking...")
-            self.model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-            app_logger.info("Cross-encoder model loaded successfully")
+            if not settings.GEMINI_API_KEY:
+                raise ValueError("GEMINI_API_KEY required")
+            
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.enabled = True
+            app_logger.info("✅ Gemini-based reranker initialized")
+            
         except Exception as e:
-            app_logger.warning(f"Failed to load cross-encoder: {str(e)}")
-            app_logger.info("Falling back to score-based reranking")
-            self.use_cross_encoder = False
+            app_logger.warning(f"⚠️ Reranker disabled: {str(e)}")
+            app_logger.info("Using score-based reranking as fallback")
+    
+    def _get_embedding(self, text: str) -> np.ndarray:
+        """Get embedding for text using Gemini"""
+        try:
+            result = genai.embed_content(
+                model=self.model_name,
+                content=text[:500],  # Limit to 500 chars for efficiency
+                task_type="retrieval_query"
+            )
+            return np.array(result['embedding'], dtype=np.float32)
+        except Exception as e:
+            app_logger.warning(f"Embedding generation failed: {e}")
+            return np.zeros(768, dtype=np.float32)
+    
+    def _compute_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """Compute cosine similarity between two vectors"""
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        return float(np.dot(vec1, vec2) / (norm1 * norm2))
     
     def rerank(
         self,
@@ -52,8 +75,8 @@ class Reranker:
             return []
         
         try:
-            if self.use_cross_encoder and self.model:
-                return self._rerank_with_cross_encoder(query, chunks, top_k)
+            if self.enabled:
+                return self._rerank_with_gemini(query, chunks, top_k)
             else:
                 return self._rerank_with_scores(query, chunks, top_k)
         
@@ -62,26 +85,25 @@ class Reranker:
             # Fallback: return original chunks
             return chunks[:top_k]
     
-    def _rerank_with_cross_encoder(
+    def _rerank_with_gemini(
         self,
         query: str,
         chunks: List[Dict],
         top_k: int
     ) -> List[Dict]:
         """
-        Rerank using cross-encoder model
-        More accurate but slower than bi-encoder
+        Rerank using Gemini embeddings
+        More accurate semantic matching
         """
         try:
-            # Prepare query-chunk pairs
-            pairs = [[query, chunk['content']] for chunk in chunks]
+            # Get query embedding once
+            query_embedding = self._get_embedding(query)
             
-            # Get relevance scores from cross-encoder
-            scores = self.model.predict(pairs)
-            
-            # Add rerank scores to chunks
-            for chunk, score in zip(chunks, scores):
-                chunk['rerank_score'] = float(score)
+            # Calculate similarity for each chunk
+            for chunk in chunks:
+                chunk_embedding = self._get_embedding(chunk['content'])
+                similarity = self._compute_similarity(query_embedding, chunk_embedding)
+                chunk['rerank_score'] = float(similarity)
             
             # Sort by rerank score (descending)
             reranked = sorted(
@@ -90,13 +112,13 @@ class Reranker:
                 reverse=True
             )
             
-            app_logger.info(f"Cross-encoder reranking: {len(chunks)} → {top_k} chunks")
+            app_logger.info(f"✅ Gemini reranking: {len(chunks)} → {top_k} chunks")
             
             return reranked[:top_k]
         
         except Exception as e:
-            app_logger.error(f"Cross-encoder reranking failed: {str(e)}")
-            return chunks[:top_k]
+            app_logger.error(f"Gemini reranking failed: {str(e)}")
+            return self._rerank_with_scores(query, chunks, top_k)
     
     def _rerank_with_scores(
         self,
@@ -111,7 +133,7 @@ class Reranker:
         try:
             # Apply heuristic scoring
             for chunk in chunks:
-                base_score = chunk['relevance_score']
+                base_score = chunk.get('relevance_score', 0.5)
                 
                 # Bonus for query term matches (simple heuristic)
                 query_terms = set(query.lower().split())
@@ -119,7 +141,7 @@ class Reranker:
                 term_overlap = len(query_terms & content_terms)
                 
                 # Bonus for chunk position (earlier chunks often more relevant)
-                position_bonus = 0.1 / (chunk['chunk_index'] + 1)
+                position_bonus = 0.1 / (chunk.get('chunk_index', 0) + 1)
                 
                 # Bonus for having page numbers (structured content)
                 page_bonus = 0.05 if chunk.get('page_number') else 0
@@ -164,7 +186,7 @@ class Reranker:
             return 0.0
         
         # Count unique files
-        unique_files = len(set(chunk['file_id'] for chunk in chunks))
+        unique_files = len(set(chunk.get('file_id', 'unknown') for chunk in chunks))
         
         # Count unique pages (if available)
         unique_pages = len(set(
