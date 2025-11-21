@@ -38,8 +38,8 @@ google-generativeai==0.3.2
 langchain==0.1.6
 langchain-community==0.0.19
 
-# Reranking
-sentence-transformers==2.3.1
+# ❌ REMOVED: sentence-transformers (pulls torch/transformers - 400-500MB RAM)
+# We use Gemini embeddings exclusively, no local fallback needed
 
 # Automations
 # Gmail

@@ -28,4 +28,4 @@ ENV PORT=10000
 EXPOSE 10000
 
 # Run with uvicorn
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     
     # Server
     HOST: str = Field(default="0.0.0.0")
-    PORT: int = Field(default=8000)
+    PORT: int = Field(default=int(os.getenv("PORT", "10000")))  # Use PORT from environment (Render)
     CORS_ORIGINS: str = Field(default="*")  # Comma-separated list of allowed origins
     
     # Database
