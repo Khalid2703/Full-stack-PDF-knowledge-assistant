@@ -3,7 +3,7 @@
 ## ⏰ TIMELINE
 
 - **Hour 1:** Environment variables + Backend deploy (30 min)
-- **Hour 2:** Frontend deploy (15 min)  
+- **Hour 2:** Frontend deploy (15 min)
 - **Hour 3:** Testing + Documentation (45 min)
 - **Hour 4:** Final submission (30 min)
 
@@ -12,11 +12,13 @@
 ## ✅ HOUR 1: DEPLOY BACKEND (30 MINUTES)
 
 ### Step 1: Create Render Account (2 min)
+
 1. Go to https://render.com
 2. Sign up with GitHub
 3. Authorize access
 
 ### Step 2: Create PostgreSQL Database (3 min)
+
 1. Click **"New +"** → **"PostgreSQL"**
 2. Name: `regnova-db`
 3. Region: **Oregon (US West)**
@@ -25,6 +27,7 @@
 6. **Copy "Internal Database URL"** - you'll need it!
 
 ### Step 3: Create Web Service (5 min)
+
 1. Click **"New +"** → **"Web Service"**
 2. Connect GitHub repo
 3. Configure:
@@ -59,22 +62,26 @@ ENABLE_HALLUCINATION_GUARD=true
 ```
 
 **To generate SECRET_KEY:**
+
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 ### Step 5: Deploy (10 min)
+
 1. Click **"Create Web Service"**
 2. Wait for deployment (5-10 minutes)
 3. Check logs for errors
 4. Your API will be at: `https://regnova-backend.onrender.com`
 
 ### Step 6: Test Backend
+
 ```bash
 curl https://regnova-backend.onrender.com/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -90,6 +97,7 @@ Expected response:
 ### Step 1: Update Frontend Config (2 min)
 
 Create `frontend/.env.production`:
+
 ```env
 NEXT_PUBLIC_API_URL=https://regnova-backend.onrender.com
 ```
@@ -97,6 +105,7 @@ NEXT_PUBLIC_API_URL=https://regnova-backend.onrender.com
 ### Step 2: Vercel Deployment (5 min)
 
 **Option A: Vercel CLI**
+
 ```bash
 npm i -g vercel
 cd frontend
@@ -104,6 +113,7 @@ vercel --prod
 ```
 
 **Option B: Vercel Dashboard** (Recommended)
+
 1. Go to https://vercel.com
 2. Click **"Add New..."** → **"Project"**
 3. Import from GitHub
@@ -118,6 +128,7 @@ vercel --prod
 6. Click **"Deploy"**
 
 ### Step 3: Test Frontend (3 min)
+
 1. Visit your Vercel URL
 2. Should see landing page
 3. Try login/register
@@ -126,6 +137,7 @@ vercel --prod
 ### Step 4: Update CORS (5 min)
 
 Update `backend/app/main.py`:
+
 ```python
 app.add_middleware(
     CORSMiddleware,
@@ -140,6 +152,7 @@ app.add_middleware(
 ```
 
 Push changes:
+
 ```bash
 git add .
 git commit -m "Update CORS for production"
@@ -181,6 +194,7 @@ Test each feature:
 ### Final Checklist
 
 #### Deliverables ✅
+
 - [ ] GitHub repo with clear commits ✅
 - [ ] README with instructions ✅
 - [ ] Architecture diagram ✅
@@ -190,6 +204,7 @@ Test each feature:
 - [ ] Live API (Render backend)
 
 #### Features ✅
+
 - [ ] Embeddings-based RAG ✅
 - [ ] Streamed responses (basic) ✅
 - [ ] Fallback model ✅
@@ -249,6 +264,7 @@ GMAIL_APP_PASSWORD=app-password
 ## 🎯 WHAT TO SKIP (Save Time!)
 
 ### Skip for now:
+
 - ❌ Gmail automation (optional)
 - ❌ WhatsApp automation (optional)
 - ❌ Push notifications (optional)
@@ -257,6 +273,7 @@ GMAIL_APP_PASSWORD=app-password
 - ❌ Advanced analytics
 
 ### Focus on:
+
 - ✅ Core chat functionality
 - ✅ PDF upload & processing
 - ✅ RAG with citations
@@ -269,16 +286,19 @@ GMAIL_APP_PASSWORD=app-password
 ## 🐛 QUICK FIXES
 
 ### Backend won't deploy?
+
 - Check logs in Render dashboard
 - Verify DATABASE_URL is set
 - Check GEMINI_API_KEY is valid
 
 ### Frontend won't connect?
+
 - Check NEXT_PUBLIC_API_URL is correct
 - Verify CORS settings in backend
 - Check browser console for errors
 
 ### Chat not working?
+
 - Make sure PDFs uploaded and processed
 - Check backend logs
 - Verify Gemini API key is valid
@@ -302,12 +322,14 @@ Before submission:
 ## 🎉 YOU'RE READY!
 
 **Timeline:**
+
 - ⏱️ Hour 1: Backend deployed ✅
 - ⏱️ Hour 2: Frontend deployed ✅
 - ⏱️ Hour 3: Everything tested ✅
 - ⏱️ Hour 4: Docs complete, submitted ✅
 
 **Your submission:**
+
 ```
 Project: Regnova Knowledge Assistant
 Frontend: https://regnova.vercel.app
