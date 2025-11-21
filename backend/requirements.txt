@@ -64,8 +64,8 @@ python-dateutil==2.8.2
 aiofiles==23.2.1
 redis==5.0.1
 
-# Pydantic email validation extra
-email-validator==1.3.1
+# Pydantic email validation extra (required for Pydantic >= 2.0)
+email-validator>=2.0.0
 
 # Rate Limiting
 slowapi==0.1.9

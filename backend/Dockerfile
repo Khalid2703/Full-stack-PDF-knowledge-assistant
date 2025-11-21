@@ -6,24 +6,26 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     poppler-utils \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Copy requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application
 COPY . .
 
-# Create necessary directories
+# Create directories
 RUN mkdir -p storage/uploads storage/vector_store logs
 
+# Set environment
+ENV PYTHONUNBUFFERED=1
+ENV PORT=10000
+
 # Expose port
-EXPOSE 8000
+EXPOSE 10000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with uvicorn
+CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
