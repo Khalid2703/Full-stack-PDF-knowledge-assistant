@@ -82,7 +82,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://frontend-regnova-virid.vercel.app",
-        "http://localhost:3000"
+        "http://localhost:3000",
+        "*"  # Allow all for now - will restrict later
     ],
     allow_credentials=True,
     allow_methods=["*"],
