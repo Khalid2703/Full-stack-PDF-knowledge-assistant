@@ -7,8 +7,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { User, Mail, Building, Calendar } from 'lucide-react';
 
+// ✅ Add this block RIGHT HERE
+type ProfileUser = {
+  id: number;
+  name: string;
+  email: string;
+  organization?: string;
+  created_at?: string;
+};
+
 export default function ProfilePage() {
-  const { user } = useAuth();
+  // ✅ Replace your current line with this:
+  const { user } = useAuth() as { user: ProfileUser | null };
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
