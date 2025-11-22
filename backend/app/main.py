@@ -81,7 +81,7 @@ app_logger.info(f"🌐 CORS configured for origins: {cors_origins_list}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://frontend-regnova-virid.vercel.app",
+        "https://regnova.vercel.app",
         "http://localhost:3000",
         "*"  # Allow all for now - will restrict later
     ],
