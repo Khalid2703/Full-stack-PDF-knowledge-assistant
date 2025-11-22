@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { chatAPI, fileAPI } from '@/lib/api';
-import { useChatStore } from '@/lib/store';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { chatAPI, fileAPI } from '../lib/api';
+import { useChatStore } from '../lib/store';
 import { toast } from 'sonner';
 import { Send, Loader2, FileText, Download, Sparkles, AlertCircle } from 'lucide-react';
-import { exportChatToPDF, exportToJSON } from '@/lib/export';
+import { exportChatToPDF, exportToJSON } from '../lib/export';
 
 export default function ChatInterface() {
   const [message, setMessage] = useState('');

@@ -1,9 +1,9 @@
-'use client';
++ 'use client';
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAuthStore } from '@/lib/store';
-import { Button } from '@/components/ui/button';
+import { useAuthStore } from '../lib/store';
+import { Button } from './ui/button';
 import { 
   Home, 
   Upload, 
