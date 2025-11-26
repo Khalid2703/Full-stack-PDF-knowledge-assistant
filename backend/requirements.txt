@@ -44,8 +44,8 @@ langchain-community==0.0.19
 # Automations
 # Gmail
 secure-smtplib==0.1.1
-# WhatsApp (***REMOVED***)
-***REMOVED***==8.11.1
+# WhatsApp (Twilio)
+twilio==8.11.1
 # Push Notifications
 pywebpush==1.14.0
 py-vapid==1.9.0
