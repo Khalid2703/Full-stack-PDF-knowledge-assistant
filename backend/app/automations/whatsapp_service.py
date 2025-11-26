@@ -1,5 +1,5 @@
 """
-WhatsApp automation service using ***REMOVED***
+WhatsApp automation service using Twilio
 Send WhatsApp messages with answers and notifications
 """
 
@@ -11,30 +11,30 @@ from app.utils.logger import app_logger
 
 class WhatsAppService:
     """
-    WhatsApp automation using ***REMOVED*** API
+    WhatsApp automation using Twilio API
     """
     
     def __init__(self):
         """Initialize WhatsApp service"""
-        self.account_sid = os.getenv("***REMOVED***_ACCOUNT_SID")
-        self.***REMOVED*** = os.getenv("***REMOVED***_***REMOVED***")
-        self.from_number = os.getenv("***REMOVED***_WHATSAPP_NUMBER", "whatsapp:+14155238886")  # ***REMOVED*** sandbox
+        self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        self.from_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")  # Twilio sandbox
         
         self.client = None
         self.enabled = False
         
-        if self.account_sid and self.***REMOVED***:
+        if self.account_sid and self.auth_token:
             try:
-                from ***REMOVED***.rest import Client
-                self.client = Client(self.account_sid, self.***REMOVED***)
+                from twilio.rest import Client
+                self.client = Client(self.account_sid, self.auth_token)
                 self.enabled = True
                 app_logger.info("WhatsApp service initialized successfully")
             except ImportError:
-                app_logger.warning("***REMOVED*** library not installed. Run: pip install ***REMOVED***")
+                app_logger.warning("Twilio library not installed. Run: pip install twilio")
             except Exception as e:
                 app_logger.error(f"Failed to initialize WhatsApp service: {str(e)}")
         else:
-            app_logger.warning("WhatsApp service not configured. Set ***REMOVED*** credentials")
+            app_logger.warning("WhatsApp service not configured. Set Twilio credentials")
     
     def send_message(
         self,
@@ -214,7 +214,7 @@ _Sent at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}_
         Get status of sent message
         
         Args:
-            message_sid: Message SID from ***REMOVED***
+            message_sid: Message SID from Twilio
         
         Returns:
             Status dictionary
