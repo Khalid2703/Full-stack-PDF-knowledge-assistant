@@ -142,7 +142,7 @@ export default function ChatInterface() {
 
   const handleExportPDF = async () => {
     try {
-      await exportChatToPDF(messages);
+      exportChatToPDF(messages, `chat-${sessionId}`);
       toast.success('Chat exported to PDF');
     } catch (err) {
       toast.error('Failed to export PDF');
