@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Google Gemini API (FREE)
     GEMINI_API_KEY: Optional[str] = Field(default=None)
     # OpenAI
-    ***REMOVED***_API_KEY: Optional[str] = Field(default=None)
+    OPENAI_API_KEY: Optional[str] = Field(default=None)
     
     # File Storage
     UPLOAD_DIR: str = Field(default="./storage/uploads")
@@ -72,11 +72,11 @@ class Settings(BaseSettings):
     GMAIL_EMAIL: Optional[str] = Field(default=None)
     GMAIL_APP_PASSWORD: Optional[str] = Field(default=None)
     
-    # ***REMOVED*** WhatsApp
-    ***REMOVED***_ACCOUNT_SID: Optional[str] = Field(default=None)
-    ***REMOVED***_***REMOVED***: Optional[str] = Field(default=None)
-    ***REMOVED***_WHATSAPP_FROM: Optional[str] = Field(default=None)
-    ***REMOVED***_WHATSAPP_TO: Optional[str] = Field(default=None)
+    # Twilio WhatsApp
+    TWILIO_ACCOUNT_SID: Optional[str] = Field(default=None)
+    TWILIO_AUTH_TOKEN: Optional[str] = Field(default=None)
+    TWILIO_WHATSAPP_FROM: Optional[str] = Field(default=None)
+    TWILIO_WHATSAPP_TO: Optional[str] = Field(default=None)
     
     # OneSignal Push Notifications
     ONESIGNAL_APP_ID: Optional[str] = Field(default=None)

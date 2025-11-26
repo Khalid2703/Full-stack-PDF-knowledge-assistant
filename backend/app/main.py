@@ -143,7 +143,7 @@ async def health_check(request: Request):
             },
             "automations": {
                 "gmail": bool(settings.GMAIL_EMAIL),
-                "whatsapp": bool(settings.***REMOVED***_ACCOUNT_SID),
+                "whatsapp": bool(settings.TWILIO_ACCOUNT_SID),
                 "push": bool(settings.ONESIGNAL_APP_ID)
             }
         }

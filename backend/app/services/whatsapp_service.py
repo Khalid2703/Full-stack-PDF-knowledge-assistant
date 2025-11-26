@@ -1,32 +1,32 @@
 """
-WhatsApp automation service using ***REMOVED***
+WhatsApp automation service using Twilio
 """
 
-from ***REMOVED***.rest import Client
+from twilio.rest import Client
 from typing import Optional
 from app.utils.logger import app_logger
 from app.config import settings
 
 
 class WhatsAppService:
-    """Service for WhatsApp automation via ***REMOVED***"""
+    """Service for WhatsApp automation via Twilio"""
     
     def __init__(self):
-        """Initialize ***REMOVED*** client"""
-        self.account_sid = settings.***REMOVED***_ACCOUNT_SID
-        self.***REMOVED*** = settings.***REMOVED***_***REMOVED***
-        self.from_number = settings.***REMOVED***_WHATSAPP_FROM
-        self.to_number = settings.***REMOVED***_WHATSAPP_TO
+        """Initialize Twilio client"""
+        self.account_sid = settings.TWILIO_ACCOUNT_SID
+        self.auth_token = settings.TWILIO_AUTH_TOKEN
+        self.from_number = settings.TWILIO_WHATSAPP_FROM
+        self.to_number = settings.TWILIO_WHATSAPP_TO
         
-        if self.account_sid and self.***REMOVED***:
+        if self.account_sid and self.auth_token:
             try:
-                self.client = Client(self.account_sid, self.***REMOVED***)
+                self.client = Client(self.account_sid, self.auth_token)
                 app_logger.info("✅ WhatsApp service initialized")
             except Exception as e:
-                app_logger.error(f"❌ Failed to initialize ***REMOVED*** client: {str(e)}")
+                app_logger.error(f"❌ Failed to initialize Twilio client: {str(e)}")
                 self.client = None
         else:
-            app_logger.warning("⚠️ ***REMOVED*** credentials not configured")
+            app_logger.warning("⚠️ Twilio credentials not configured")
             self.client = None
     
     def send_message(
