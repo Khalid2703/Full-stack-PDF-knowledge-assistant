@@ -34,6 +34,9 @@ chromadb==0.4.22
 # Google Gemini API (FREE!)
 google-generativeai==0.3.2
 
+# OpenAI GPT-4o-mini (Primary LLM)
+openai>=1.0.0
+
 # NLP & AI
 langchain==0.1.6
 langchain-community==0.0.19
