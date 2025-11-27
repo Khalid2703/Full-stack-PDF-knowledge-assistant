@@ -1,47 +1,27 @@
 """
-Answer generation using Google Gemini API (FREE)
-Optimized for conversational, context-aware responses
+Answer generation using unified LLM service
+Supports OpenAI (primary) → Gemini (fallback) with citation management
 """
 
 from typing import List, Dict, Optional, Tuple
 import time
 from app.utils.logger import app_logger
 from app.config import settings
-
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    app_logger.warning("google-generativeai not installed")
+from app.services.llm_service import llm_service
 
 
 class AnswerGenerator:
     """
-    Answer generation using Gemini API with intelligent fallback
+    Answer generation using unified LLM service with intelligent fallback
+    Primary: OpenAI GPT-4o-mini
+    Fallback: Google Gemini 1.5-flash
     """
     
     def __init__(self):
-        """Initialize Gemini AI"""
-        self.gemini_available = False
-        self.model = None
-        
-        if GEMINI_AVAILABLE and settings.GEMINI_API_KEY:
-            try:
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self.model = genai.GenerativeModel(
-                    model_name=settings.LLM_MODEL or 'gemini-1.5-pro',
-                    generation_config={
-                        'temperature': 0.3,
-                        'max_output_tokens': 2048,
-                    }
-                )
-                self.gemini_available = True
-                app_logger.info("✅ Gemini AI initialized successfully")
-            except Exception as e:
-                app_logger.error(f"❌ Gemini initialization failed: {str(e)}")
-        else:
-            app_logger.warning("⚠️ Gemini API key not configured")
+        """Initialize Answer Generator with unified LLM service"""
+        app_logger.info("✅ Answer Generator initialized (using unified LLM service)")
+        app_logger.info("   Primary: OpenAI GPT-4o-mini")
+        app_logger.info("   Fallback: Gemini 1.5-flash")
     
     def generate_answer(
         self,
@@ -51,7 +31,7 @@ class AnswerGenerator:
         use_citations: bool = True
     ) -> Tuple[str, Dict]:
         """
-        Generate conversational answer with proper context
+        Generate conversational answer with proper context and citations
         
         Args:
             query: User's question
@@ -64,120 +44,95 @@ class AnswerGenerator:
         """
         start_time = time.time()
         metadata = {
-            "model_used": "gemini" if self.gemini_available else "template",
+            "model_used": "unified_llm",
             "tokens_used": 0,
             "generation_time": 0,
             "chunks_used": len(chunks)
         }
         
-        # Prioritize Gemini - try it first
-        if self.gemini_available:
-            try:
-                app_logger.info(f"🤖 Using Gemini AI to generate answer (model: {settings.LLM_MODEL})")
-                answer, meta = self._generate_with_gemini(
-                    query, context, chunks, use_citations
-                )
-                metadata.update(meta)
-                metadata["generation_time"] = time.time() - start_time
-                app_logger.info(f"✅ Gemini answer generated successfully in {metadata['generation_time']:.2f}s")
-                return answer, metadata
-            except Exception as e:
-                error_msg = str(e)
-                app_logger.error(f"❌ Gemini generation failed: {error_msg}")
-                
-                # If it's a quota error, provide helpful message
-                if 'quota' in error_msg.lower() or '429' in error_msg:
-                    app_logger.error(f"💡 Gemini quota exceeded. Check usage at: https://ai.dev/usage?tab=rate-limit")
-                    app_logger.info(f"📝 Falling back to template-based answer generation")
-                else:
-                    app_logger.warning(f"⚠️ Falling back to template-based answer generation")
-        else:
-            app_logger.info(f"⚠️ Gemini not available. Using template-based answer generation")
-        
-        # Fallback to smart template
-        app_logger.info(f"📝 Generating template-based answer...")
-        answer, meta = self._generate_smart_template(query, context, chunks, use_citations)
-        metadata.update(meta)
-        metadata["generation_time"] = time.time() - start_time
-        app_logger.info(f"✅ Template answer generated in {metadata['generation_time']:.2f}s")
-        return answer, metadata
+        try:
+            # Build enhanced context with citation markers
+            formatted_context = self._format_context_with_sources(context, chunks, use_citations)
+            
+            # Build the prompt
+            enhanced_query = self._build_query_with_instructions(query, use_citations)
+            
+            # Generate answer using unified LLM service (OpenAI → Gemini fallback)
+            app_logger.info(f"🤖 Generating answer using unified LLM service")
+            answer_text = llm_service.generate_response(
+                prompt=enhanced_query,
+                context=formatted_context
+            )
+            
+            # Post-process: ensure citations are properly formatted
+            if use_citations:
+                answer_text = self._ensure_citations(answer_text, chunks)
+            
+            # Calculate metadata
+            metadata["tokens_used"] = len(answer_text.split())
+            metadata["generation_time"] = time.time() - start_time
+            
+            app_logger.info(f"✅ Answer generated successfully in {metadata['generation_time']:.2f}s")
+            return answer_text, metadata
+            
+        except Exception as e:
+            app_logger.error(f"❌ Answer generation failed: {str(e)}")
+            # Fallback to template-based answer
+            app_logger.info(f"📝 Using template-based answer as final fallback")
+            answer, meta = self._generate_smart_template(query, context, chunks, use_citations)
+            metadata.update(meta)
+            metadata["generation_time"] = time.time() - start_time
+            return answer, metadata
     
-    def _generate_with_gemini(
+    def _build_query_with_instructions(self, query: str, use_citations: bool) -> str:
+        """Build query with instructions for citation formatting"""
+        if use_citations:
+            return f"""{query}
+
+IMPORTANT INSTRUCTIONS:
+- Reference sources using [Source N] format where N is the source number
+- Cite specific information from the sources
+- Maintain a professional, conversational tone
+- Structure your response with clear sections"""
+        else:
+            return query
+    
+    def _format_context_with_sources(
         self,
-        query: str,
         context: str,
         chunks: List[Dict],
         use_citations: bool
-    ) -> Tuple[str, Dict]:
-        """Generate answer using Gemini with optimized prompt"""
+    ) -> str:
+        """Format context with clear source markers for citation"""
+        if not use_citations or not chunks:
+            return context
         
-        # Build comprehensive prompt
-        system_instructions = """You are an intelligent AI assistant helping users understand their documents.
-
-CRITICAL RULES:
-1. Answer based ONLY on the provided context
-2. Be conversational and helpful
-3. Cite sources using [Source N] format
-4. If context doesn't have the answer, say so clearly
-5. Provide specific details, numbers, and quotes when available
-6. Keep responses focused and well-structured
-7. Use bullet points for lists
-8. Bold important terms with **text**"""
-
-        # Build context with source labels
-        formatted_context = []
+        formatted_parts = []
         for i, chunk in enumerate(chunks[:10], 1):
             filename = chunk.get('filename', 'Unknown')
             page = chunk.get('page_number', 'N/A')
             content = chunk.get('content', '')
-            formatted_context.append(
-                f"[Source {i}] - {filename} (Page {page})\n{content}\n"
+            
+            formatted_parts.append(
+                f"[Source {i}] {filename} (Page {page})\n{content}\n"
             )
         
-        context_text = "\n---\n".join(formatted_context)
+        return "\n---\n".join(formatted_parts)
+    
+    def _ensure_citations(self, answer: str, chunks: List[Dict]) -> str:
+        """
+        Ensure citations are properly formatted
+        Verifies that [Source N] references are valid
+        """
+        # Check if answer has any citations
+        import re
+        citations = re.findall(r'\[Source (\d+)\]', answer)
         
-        # Build final prompt
-        if use_citations:
-            prompt = f"""{system_instructions}
-
-AVAILABLE CONTEXT:
-{context_text}
-
-USER QUESTION: {query}
-
-INSTRUCTIONS:
-- Provide a detailed, conversational answer
-- Reference sources as [Source 1], [Source 2], etc.
-- Include specific details from the documents
-- Structure your answer clearly
-- If multiple sources are relevant, synthesize the information
-
-ANSWER:"""
-        else:
-            prompt = f"""{system_instructions}
-
-CONTEXT:
-{context_text}
-
-QUESTION: {query}
-
-Provide a clear, detailed answer based on the context above."""
+        if not citations and chunks:
+            # Add a general citation at the end if none exist
+            answer += f"\n\n*Based on {len(chunks)} source document(s).*"
         
-        try:
-            response = self.model.generate_content(prompt)
-            answer = response.text
-            
-            metadata = {
-                "model_used": "gemini-1.5-pro",
-                "tokens_used": len(answer.split()),  # Approximate
-            }
-            
-            app_logger.info(f"✅ Gemini answer generated: {len(answer)} chars")
-            return answer, metadata
-        
-        except Exception as e:
-            app_logger.error(f"Gemini API error: {str(e)}")
-            raise
+        return answer
     
     def _generate_smart_template(
         self,
@@ -187,7 +142,7 @@ Provide a clear, detailed answer based on the context above."""
         use_citations: bool
     ) -> Tuple[str, Dict]:
         """
-        Smart template-based answer generation
+        Smart template-based answer generation as final fallback
         Better than raw source output
         """
         # Extract key information
@@ -242,54 +197,37 @@ Provide a clear, detailed answer based on the context above."""
     ):
         """
         Generate streaming answer for real-time display
+        Uses unified LLM service streaming
         
         Yields:
             Chunks of text as they're generated
         """
-        if not self.gemini_available:
-            # Non-streaming fallback
+        try:
+            # Format context with sources
+            formatted_context = self._format_context_with_sources(context, chunks, use_citations)
+            
+            # Build enhanced query
+            enhanced_query = self._build_query_with_instructions(query, use_citations)
+            
+            # Stream using unified LLM service
+            app_logger.info("🌊 Streaming answer using unified LLM service")
+            
+            for chunk in llm_service.generate_response_stream(
+                prompt=enhanced_query,
+                context=formatted_context
+            ):
+                yield chunk
+        
+        except Exception as e:
+            app_logger.error(f"❌ Streaming error: {str(e)}")
+            # Fallback to non-streaming
             answer, _ = self._generate_smart_template(query, context, chunks, use_citations)
+            
             # Simulate streaming by yielding words
             words = answer.split()
             for word in words:
                 yield word + " "
                 time.sleep(0.02)  # Small delay for effect
-            return
-        
-        # Build Gemini prompt (same as non-streaming)
-        system_instructions = """You are a helpful AI assistant. Answer based on the provided context.
-Use [Source N] citations. Be conversational and detailed."""
-        
-        formatted_context = []
-        for i, chunk in enumerate(chunks[:10], 1):
-            filename = chunk.get('filename', 'Unknown')
-            content = chunk.get('content', '')
-            formatted_context.append(f"[Source {i}] {filename}\n{content}\n")
-        
-        context_text = "\n---\n".join(formatted_context)
-        
-        prompt = f"""{system_instructions}
-
-CONTEXT:
-{context_text}
-
-QUESTION: {query}
-
-Provide a detailed answer with citations."""
-        
-        try:
-            response = self.model.generate_content(
-                prompt,
-                stream=True
-            )
-            
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-        
-        except Exception as e:
-            app_logger.error(f"Streaming error: {str(e)}")
-            yield f"\n\nError: {str(e)}"
 
 
 # Global instance

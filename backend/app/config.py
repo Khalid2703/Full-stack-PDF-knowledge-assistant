@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = Field(default="models/embedding-001")
     EMBEDDING_DIMENSION: int = Field(default=768)
     
-    # LLM Configuration (Gemini)
-    LLM_MODEL: str = Field(default="gemini-pro")
+    # LLM Configuration (Gemini) - UPDATED to current model
+    LLM_MODEL: str = Field(default="gemini-1.5-flash")  # ✅ FIXED: Updated from deprecated gemini-pro
     LLM_TEMPERATURE: float = Field(default=0.7)
     LLM_MAX_TOKENS: int = Field(default=2048)
     

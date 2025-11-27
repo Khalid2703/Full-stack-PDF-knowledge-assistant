@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { chatAPI, fileAPI } from '../lib/api';
 import { useChatStore } from '../lib/store';
 import { toast } from 'sonner';
-import { Send, Loader2, FileText, Download, Sparkles, AlertCircle, Plus } from 'lucide-react';
+import { Send, Loader2, FileText, Download, Sparkles, AlertCircle, Plus, RefreshCw } from 'lucide-react';
 import { exportChatToPDF, exportToJSON } from '../lib/export';
 import ReactMarkdown from 'react-markdown';
 
@@ -18,6 +18,7 @@ export default function ChatInterface() {
   const [files, setFiles] = useState<any[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
   const filesDropdownRef = useRef<HTMLDivElement | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,18 +31,78 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    const loadFiles = async () => {
-      try {
-        const res = await fileAPI.listFiles();
-        setFiles(res.data || []);
-      } catch (err) {
-        // ignore
-      }
-    };
-    loadFiles();
-  }, []);
+  // ✅ PROPER FIX: Load files and validate selections
+  const loadFiles = useCallback(async () => {
+    setLoadingFiles(true);
+    try {
+      const res = await fileAPI.listFiles();
+      const filesList = res.data || [];
+      setFiles(filesList);
+      
+      // Validate selected files - use setSelectedFileIds callback to get current value
+      setSelectedFileIds(currentSelectedIds => {
+        if (filesList.length === 0) {
+          // No files exist, clear everything
+          localStorage.removeItem('selectedFileIds');
+          return [];
+        }
+        
+        // Get valid file IDs from the fetched list
+        const validFileIds = filesList.map((f: any) => f.id);
+        
+        // Filter out any selected IDs that no longer exist
+        const validSelectedIds = currentSelectedIds.filter(id => validFileIds.includes(id));
+        
+        // Update localStorage
+        if (validSelectedIds.length === 0) {
+          localStorage.removeItem('selectedFileIds');
+        } else {
+          localStorage.setItem('selectedFileIds', JSON.stringify(validSelectedIds));
+        }
+        
+        // Only update state if something changed
+        if (validSelectedIds.length !== currentSelectedIds.length) {
+          console.log(`Cleaned up selections: ${currentSelectedIds.length} → ${validSelectedIds.length}`);
+          if (validSelectedIds.length < currentSelectedIds.length) {
+            toast.info(`Removed ${currentSelectedIds.length - validSelectedIds.length} deleted file(s) from selection`);
+          }
+        }
+        
+        return validSelectedIds;
+      });
+    } catch (err) {
+      console.error('Failed to load files:', err);
+      toast.error('Failed to load files');
+    } finally {
+      setLoadingFiles(false);
+    }
+  }, []); // No dependencies needed since we use callback form of setState
 
+  // Load files on mount
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
+
+  // Load files when window regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      loadFiles();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadFiles]);
+
+  // Reload files every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadFiles();
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [loadFiles]);
+
+  // Load selected file IDs from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem('selectedFileIds');
@@ -50,15 +111,21 @@ export default function ChatInterface() {
         setSelectedFileIds(parsed || []);
       }
     } catch (e) {
-      // ignore
+      console.error('Failed to load selected files:', e);
+      localStorage.removeItem('selectedFileIds');
     }
   }, []);
 
+  // Save selected file IDs to localStorage whenever they change
   useEffect(() => {
     try {
-      localStorage.setItem('selectedFileIds', JSON.stringify(selectedFileIds));
+      if (selectedFileIds.length === 0) {
+        localStorage.removeItem('selectedFileIds');
+      } else {
+        localStorage.setItem('selectedFileIds', JSON.stringify(selectedFileIds));
+      }
     } catch (e) {
-      // ignore
+      console.error('Failed to save selected files:', e);
     }
   }, [selectedFileIds]);
 
@@ -193,13 +260,25 @@ export default function ChatInterface() {
             <span className="text-sm text-gray-700">
               {selectedFileIds.length > 0 ? `${selectedFileIds.length} file(s) selected` : 'Select files for context'}
             </span>
-            <FileText className="h-4 w-4 text-gray-400" />
+            <div className="flex items-center gap-2">
+              {loadingFiles && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+              <FileText className="h-4 w-4 text-gray-400" />
+            </div>
           </button>
 
           {filesOpen && (
             <div className="absolute top-full mt-1 w-full bg-white border rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
-              <div className="p-2 border-b">
-                <Input placeholder="Search files..." value={fileSearch} onChange={(e) => setFileSearch(e.target.value)} className="text-sm" />
+              <div className="p-2 border-b flex items-center gap-2">
+                <Input placeholder="Search files..." value={fileSearch} onChange={(e) => setFileSearch(e.target.value)} className="text-sm flex-1" />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => loadFiles()} 
+                  disabled={loadingFiles}
+                  title="Refresh files list"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingFiles ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
               <div className="p-2 space-y-1">
                 {filteredFiles.length === 0 ? (
@@ -209,7 +288,7 @@ export default function ChatInterface() {
                     <label key={file.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                       <input type="checkbox" checked={selectedFileIds.includes(file.id)} onChange={() => toggleFileSelection(file.id)} className="rounded" />
                       <span className="text-sm text-gray-700 truncate flex-1">{file.original_filename}</span>
-                      <span className="text-xs text-gray-500">{file.status === 'ready' ? '✓' : '...'}</span>
+                      <span className="text-xs text-gray-500">{file.is_processed === 2 ? '✓' : '...'}</span>
                     </label>
                   ))
                 )}
