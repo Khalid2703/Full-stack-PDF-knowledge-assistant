@@ -22,7 +22,7 @@ export default function HomePage() {
         <div className="text-center space-y-8">
           <div className="inline-block">
             <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-4 py-2 rounded-full">
-              Powered by Google Gemini AI
+              Powered by OpenAI GPT-4o-mini
             </span>
           </div>
           
