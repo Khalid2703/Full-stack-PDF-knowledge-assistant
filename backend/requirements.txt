@@ -29,7 +29,6 @@ html2text==2024.2.26
 
 # Vector Store & Embeddings
 faiss-cpu==1.7.4
-chromadb==0.4.22
 
 # Google Gemini API (FREE!)
 google-generativeai==0.3.2
