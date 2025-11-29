@@ -1,6 +1,7 @@
 """
 RAG (Retrieval-Augmented Generation) service
 Manages vector store, retrieval, and ranking of relevant chunks
+FIXED: Handles empty/missing FAISS index gracefully on Render deployments
 """
 
 import faiss
@@ -26,6 +27,9 @@ class RAGService:
         self.index_path = os.path.join(settings.VECTOR_STORE_PATH, "faiss_index.bin")
         self.map_path = os.path.join(settings.VECTOR_STORE_PATH, "document_map.pkl")
         
+        # ✅ FIX: Ensure directory exists
+        os.makedirs(settings.VECTOR_STORE_PATH, exist_ok=True)
+        
         # Load existing index if available
         self._load_index()
     
@@ -36,12 +40,14 @@ class RAGService:
                 self.index = faiss.read_index(self.index_path)
                 with open(self.map_path, 'rb') as f:
                     self.document_map = pickle.load(f)
-                app_logger.info(f"Loaded existing index with {self.index.ntotal} vectors")
+                app_logger.info(f"✅ Loaded existing FAISS index with {self.index.ntotal} vectors")
             else:
-                # Create new index
+                # Create new index - this is normal on first deployment
                 self._create_new_index()
+                app_logger.info("📝 Created new FAISS index (no existing index found)")
         except Exception as e:
-            app_logger.error(f"Error loading index: {str(e)}")
+            app_logger.warning(f"⚠️ Could not load existing index: {str(e)}")
+            app_logger.info("📝 Creating fresh FAISS index")
             self._create_new_index()
     
     def _create_new_index(self):
@@ -54,12 +60,16 @@ class RAGService:
     def _save_index(self):
         """Save FAISS index and document map to disk"""
         try:
+            # ✅ FIX: Ensure directory exists before saving
+            os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
+            os.makedirs(os.path.dirname(self.map_path), exist_ok=True)
+            
             faiss.write_index(self.index, self.index_path)
             with open(self.map_path, 'wb') as f:
                 pickle.dump(self.document_map, f)
-            app_logger.info(f"Saved index with {self.index.ntotal} vectors")
+            app_logger.info(f"✅ Saved FAISS index with {self.index.ntotal} vectors")
         except Exception as e:
-            app_logger.error(f"Error saving index: {str(e)}")
+            app_logger.error(f"❌ Error saving index: {str(e)}")
             raise
     
     def add_documents(self, chunks: List[Dict[str, any]]) -> List[int]:
@@ -73,10 +83,16 @@ class RAGService:
             List of vector IDs assigned to chunks
         """
         try:
+            # ✅ FIX: Recreate index if it's None
+            if self.index is None:
+                app_logger.warning("⚠️ FAISS index was None, recreating...")
+                self._create_new_index()
+            
             # Extract texts
             texts = [chunk['content'] for chunk in chunks]
             
             # Generate embeddings
+            app_logger.info(f"Generating embeddings for {len(texts)} chunks...")
             embeddings = embedding_service.generate_embeddings_batch(texts)
             
             # Convert to numpy array
@@ -106,11 +122,12 @@ class RAGService:
             # Save index
             self._save_index()
             
-            app_logger.info(f"Added {len(chunks)} chunks to vector store")
+            app_logger.info(f"✅ Added {len(chunks)} chunks to vector store")
             return vector_ids
         
         except Exception as e:
-            app_logger.error(f"Error adding documents: {str(e)}")
+            app_logger.error(f"❌ Error adding documents: {str(e)}")
+            app_logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     def search(self, query: str, top_k: int = 5, file_ids: Optional[List[int]] = None) -> List[Dict[str, any]]:
@@ -126,220 +143,123 @@ class RAGService:
             List of relevant chunks with metadata and scores
         """
         try:
-            if self.index is None or getattr(self.index, 'ntotal', 0) == 0:
-                app_logger.warning("Vector store is empty")
+            # ✅ FIX: Check if index exists and has vectors
+            if self.index is None:
+                app_logger.warning("⚠️ FAISS index is None")
                 return []
             
-            # Ensure embedding dimension matches index dimension; if not, attempt reindex
-            try:
-                index_dim = int(getattr(self.index, 'd', embedding_service.embedding_dim))
-            except Exception:
-                index_dim = embedding_service.embedding_dim
-
-            if embedding_service.embedding_dim != index_dim:
-                app_logger.warning(f"Embedding dim mismatch (index={index_dim}, current={embedding_service.embedding_dim}). Rebuilding index to match current backend.")
-                # Rebuild index using current embedding backend
-                try:
-                    self._reindex_all()
-                    # After reindexing, update index_dim to match new index
-                    index_dim = embedding_service.embedding_dim
-                except Exception as re:
-                    error_msg = str(re) if str(re) else type(re).__name__
-                    app_logger.error(f"Reindexing failed: {error_msg}")
-                    app_logger.error(f"Reindexing traceback: {traceback.format_exc()}")
-                    raise RuntimeError(f"Failed to reindex: dimension mismatch (index={index_dim}, current={embedding_service.embedding_dim}). Reindexing failed: {error_msg}") from re
-
-            # Generate query embedding (this might change embedding_dim if switching backends)
-            query_embedding = embedding_service.generate_embedding(query)
+            if self.index.ntotal == 0:
+                app_logger.warning("⚠️ Vector store is empty - no documents indexed yet")
+                return []
             
-            # Verify dimension AFTER embedding generation (in case backend switched)
-            query_dim = len(query_embedding) if hasattr(query_embedding, '__len__') else query_embedding.shape[0] if hasattr(query_embedding, 'shape') else None
-            current_index_dim = int(getattr(self.index, 'd', index_dim))
+            # Generate query embedding
+            query_embedding = embedding_service.generate_query_embedding(query)
+            query_vector = np.array([query_embedding], dtype='float32')
             
-            if query_dim and query_dim != current_index_dim:
-                app_logger.warning(f"Query embedding dimension ({query_dim}) doesn't match index dimension ({current_index_dim}). Triggering reindex.")
-                try:
-                    self._reindex_all()
-                    current_index_dim = embedding_service.embedding_dim
-                except Exception as re:
-                    error_msg = str(re) if str(re) else type(re).__name__
-                    app_logger.error(f"Emergency reindexing failed: {error_msg}")
-                    app_logger.error(f"Reindexing traceback: {traceback.format_exc()}")
-                    raise RuntimeError(f"Dimension mismatch: query={query_dim}, index={current_index_dim}. Reindexing failed: {error_msg}") from re
-            
-            query_embedding = np.array([query_embedding]).astype('float32')
-            
-            # Final safety check before search
-            if query_embedding.shape[1] != current_index_dim:
-                raise ValueError(
-                    f"Critical dimension mismatch: query embedding has {query_embedding.shape[1]} dimensions, "
-                    f"but FAISS index expects {current_index_dim} dimensions. "
-                    f"Please delete the vector store and re-upload documents, or check embedding service configuration."
-                )
-            
-            # Search in FAISS (search more than needed if filtering by file_ids)
-            search_k = top_k * 3 if file_ids else top_k
-            distances, indices = self.index.search(query_embedding, search_k)
+            # Search in FAISS
+            distances, indices = self.index.search(query_vector, min(top_k * 3, self.index.ntotal))
             
             # Prepare results
             results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
+            for dist, idx in zip(distances[0], indices[0]):
                 if idx == -1:  # FAISS returns -1 for empty slots
                     continue
                 
-                doc_metadata = self.document_map.get(int(idx))
-                if not doc_metadata:
+                if idx not in self.document_map:
+                    app_logger.warning(f"⚠️ Vector ID {idx} not in document map")
                     continue
                 
-                # Filter by file_ids if specified
-                if file_ids and doc_metadata['file_id'] not in file_ids:
+                doc_info = self.document_map[idx]
+                
+                # Filter by file_ids if provided
+                if file_ids and doc_info.get('file_id') not in file_ids:
                     continue
                 
-                # Convert L2 distance to similarity score (0 to 1)
-                # Lower distance = higher similarity
-                similarity_score = 1 / (1 + float(distance))
+                # Convert L2 distance to similarity score (0-1)
+                similarity = 1 / (1 + float(dist))
                 
                 results.append({
-                    'vector_id': int(idx),
-                    'file_id': doc_metadata['file_id'],
-                    'chunk_id': doc_metadata.get('chunk_id'),
-                    'chunk_index': doc_metadata['chunk_index'],
-                    'content': doc_metadata['content'],
-                    'page_number': doc_metadata.get('page_number'),
-                    'filename': doc_metadata['filename'],
-                    'relevance_score': similarity_score,
-                    'distance': float(distance)
+                    'file_id': doc_info.get('file_id'),
+                    'chunk_id': doc_info.get('chunk_id'),
+                    'chunk_index': doc_info.get('chunk_index'),
+                    'content': doc_info.get('content'),
+                    'page_number': doc_info.get('page_number'),
+                    'filename': doc_info.get('filename'),
+                    'relevance_score': similarity
                 })
-                
-                if len(results) >= top_k:
-                    break
             
-            app_logger.info(f"Found {len(results)} relevant chunks for query")
+            # Return top_k results
+            results = results[:top_k]
+            
+            if results:
+                app_logger.info(f"✅ Found {len(results)} relevant chunks for query")
+            else:
+                app_logger.warning("⚠️ No relevant chunks found for query")
+            
             return results
         
         except Exception as e:
-            error_msg = str(e) if str(e) else type(e).__name__
-            app_logger.error(f"Error searching: {error_msg}", exc_info=True)
+            app_logger.error(f"❌ Search error: {str(e)}")
             app_logger.error(f"Traceback: {traceback.format_exc()}")
-            raise
+            return []
     
     def delete_file_vectors(self, file_id: int):
         """
-        Remove all vectors associated with a file
-        Note: FAISS doesn't support efficient deletion, so we rebuild the index
-        
-        Args:
-            file_id: ID of file to remove
+        Delete all vectors for a specific file
+        NOTE: FAISS doesn't support deletion, so we rebuild the entire index
         """
         try:
-            # Filter out vectors from the specified file
-            remaining_vectors = []
-            remaining_metadata = {}
+            app_logger.info(f"Deleting vectors for file_id={file_id}")
             
-            for vector_id, metadata in self.document_map.items():
-                if metadata['file_id'] != file_id:
-                    remaining_vectors.append(vector_id)
-                    remaining_metadata[len(remaining_vectors) - 1] = metadata
+            # Find vectors to keep (not matching file_id)
+            vectors_to_keep = {}
+            for vector_id, doc_info in self.document_map.items():
+                if doc_info.get('file_id') != file_id:
+                    vectors_to_keep[vector_id] = doc_info
             
-            if len(remaining_vectors) == len(self.document_map):
+            if len(vectors_to_keep) == len(self.document_map):
                 app_logger.info(f"No vectors found for file_id {file_id}")
                 return
             
             # Rebuild index with remaining vectors
-            if remaining_vectors:
-                # Extract embeddings from old index
-                embeddings = []
-                for vid in remaining_vectors:
-                    vector = self.index.reconstruct(int(vid))
-                    embeddings.append(vector)
+            if len(vectors_to_keep) > 0:
+                app_logger.info(f"Rebuilding index: {len(self.document_map)} → {len(vectors_to_keep)} vectors")
                 
-                # Create new index
-                self._create_new_index()
-                embeddings_array = np.array(embeddings).astype('float32')
-                self.index.add(embeddings_array)
-                self.document_map = remaining_metadata
+                # Get chunks from database to regenerate embeddings
+                db = SessionLocal()
+                try:
+                    chunk_ids = [doc['chunk_id'] for doc in vectors_to_keep.values()]
+                    chunks = db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()
+                    
+                    # Recreate index
+                    self._create_new_index()
+                    
+                    # Re-add chunks
+                    chunk_data = []
+                    for chunk in chunks:
+                        chunk_data.append({
+                            'file_id': chunk.file_id,
+                            'chunk_id': chunk.id,
+                            'chunk_index': chunk.chunk_index,
+                            'content': chunk.content,
+                            'page_number': chunk.page_number,
+                            'filename': chunk.file.original_filename if chunk.file else 'Unknown'
+                        })
+                    
+                    if chunk_data:
+                        self.add_documents(chunk_data)
+                        app_logger.info(f"✅ Rebuilt index with {len(chunk_data)} chunks")
+                    
+                finally:
+                    db.close()
             else:
                 # No vectors left, create empty index
+                app_logger.info("No vectors remaining, creating empty index")
                 self._create_new_index()
-            
-            self._save_index()
-            app_logger.info(f"Deleted vectors for file_id {file_id}")
+                self._save_index()
         
         except Exception as e:
-            app_logger.error(f"Error deleting file vectors: {str(e)}")
-            raise
-
-    def _reindex_all(self):
-        """
-        Rebuild the FAISS index using the current embedding backend.
-        This will re-embed all stored chunks using `embedding_service` and update
-        the `document_map` and the DB `chunks.vector_id` values to match the new index ids.
-        """
-        app_logger.info("Reindex: Starting full reindex using current embedding backend")
-
-        # Collect existing metadata ordered by previous vector id
-        items = sorted(self.document_map.items(), key=lambda x: int(x[0]))
-        texts = [meta['content'] for _, meta in items]
-
-        if not texts:
-            app_logger.info("Reindex: No documents to reindex, creating empty index")
-            self._create_new_index()
-            self._save_index()
-            return
-
-        try:
-            # Generate embeddings for all texts
-            app_logger.info(f"Reindex: Generating embeddings for {len(texts)} texts")
-            embeddings = embedding_service.generate_embeddings_batch(texts, batch_size=128)
-            
-            if not embeddings or len(embeddings) == 0:
-                raise ValueError("Failed to generate embeddings - empty result")
-            
-            embeddings_array = np.array(embeddings).astype('float32')
-            
-            # Verify embedding dimension matches expected
-            if embeddings_array.shape[1] != embedding_service.embedding_dim:
-                raise ValueError(f"Embedding dimension mismatch: got {embeddings_array.shape[1]}, expected {embedding_service.embedding_dim}")
-
-            # Create new index with current embedding dim
-            dimension = embedding_service.embedding_dim
-            self.index = faiss.IndexFlatL2(dimension)
-            self.index.add(embeddings_array)
-        except Exception as e:
-            error_msg = str(e) if str(e) else type(e).__name__
-            app_logger.error(f"Reindex: Failed to generate embeddings or create index: {error_msg}")
-            app_logger.error(f"Reindex traceback: {traceback.format_exc()}")
-            raise
-
-        # Rebuild document_map and update DB chunk.vector_id
-        new_map = {}
-        db = SessionLocal()
-        try:
-            for new_vid, (old_vid, meta) in enumerate(items):
-                new_map[new_vid] = meta.copy()
-
-                # Update DB chunk record vector_id if chunk_id exists
-                chunk_id = meta.get('chunk_id')
-                if chunk_id is not None:
-                    try:
-                        chunk_rec = db.query(Chunk).filter(Chunk.id == int(chunk_id)).first()
-                        if chunk_rec:
-                            chunk_rec.vector_id = str(new_vid)
-                            db.add(chunk_rec)
-                    except Exception as e:
-                        app_logger.warning(f"Reindex: failed to update DB chunk {chunk_id}: {e}")
-
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            app_logger.error(f"Reindex: DB update failed: {e}")
-            raise
-        finally:
-            db.close()
-
-        self.document_map = new_map
-        self._save_index()
-        app_logger.info(f"Reindex: Completed. New index size: {self.index.ntotal}")
+            app_logger.error(f"❌ Error deleting file vectors: {str(e)}")
 
 
 # Global instance

@@ -91,7 +91,7 @@ class EmbeddingService:
         Returns:
             List of embedding vectors
         """
-        try:
+        try: 
             app_logger.info(f"Generating embeddings for {len(texts)} texts")
 
             embeddings = []

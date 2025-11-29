@@ -29,9 +29,10 @@ html2text==2024.2.26
 
 # Vector Store & Embeddings
 faiss-cpu==1.7.4
+chromadb==0.4.22
 
 # Google Gemini API (FREE!)
-google-generativeai==0.3.2
+google-generativeai>=0.8.0
 
 # OpenAI GPT-4o-mini (Primary LLM)
 openai>=1.0.0
@@ -39,9 +40,6 @@ openai>=1.0.0
 # NLP & AI
 langchain==0.1.6
 langchain-community==0.0.19
-
-# ❌ REMOVED: sentence-transformers (pulls torch/transformers - 400-500MB RAM)
-# We use Gemini embeddings exclusively, no local fallback needed
 
 # Automations
 # Gmail
@@ -54,7 +52,6 @@ py-vapid==1.9.0
 onesignal-sdk==2.0.0
 
 # Safety & Security
-# pin to latest available release compatible with PyPI (0.0.35)
 langkit==0.0.35
 
 # Utilities
@@ -66,12 +63,8 @@ python-dateutil==2.8.2
 aiofiles==23.2.1
 redis==5.0.1
 
-# Pydantic email validation extra (required for Pydantic >= 2.0)
+# Pydantic email validation extra
 email-validator>=2.0.0
 
 # Rate Limiting
 slowapi==0.1.9
-
-# CORS
-# No external package required for CORS; FastAPI provides CORSMiddleware via starlette.
-# Removed invalid 'python-cors' entry which is not on PyPI.

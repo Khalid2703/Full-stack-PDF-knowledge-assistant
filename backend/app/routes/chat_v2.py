@@ -103,13 +103,25 @@ async def send_message_v2(
                 # Build context
                 context = rag_pipeline.build_context(chunks)
                 
-                # Step 3: Generate answer
-                answer_text, gen_metadata = answer_generator.generate_answer(
-                    query=request.message,
-                    context=context,
-                    chunks=chunks,
-                    use_citations=request.include_citations
-                )
+                # Step 3: Generate answer with error handling
+                try:
+                    answer_text, gen_metadata = answer_generator.generate_answer(
+                        query=request.message,
+                        context=context,
+                        chunks=chunks,
+                        use_citations=request.include_citations
+                    )
+                except Exception as gen_error:
+                    app_logger.error(f"Answer generation failed: {gen_error}", exc_info=True)
+                    # Fallback to extractive summary
+                    answer_text = f"I found {len(chunks)} relevant sources:\n\n"
+                    for i, chunk in enumerate(chunks[:3], 1):
+                        filename = chunk.get('filename', 'Unknown')
+                        page = chunk.get('page_number', 'N/A')
+                        content = chunk.get('content', '')[:200]
+                        answer_text += f"**[Source {i}] {filename} (Page {page})**\n{content}...\n\n"
+                    answer_text += f"\n*Note: AI answer generation failed, showing source excerpts instead.*"
+                    gen_metadata = {"model_used": "fallback_extractive", "tokens_used": 0}
                 
                 # Step 4: Add/verify citations
                 if request.include_citations:
