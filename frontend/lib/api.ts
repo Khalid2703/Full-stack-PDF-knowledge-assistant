@@ -53,6 +53,7 @@ export const fileAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   listFiles: () => api.get('/upload/files'),
+  getFileStatus: (fileId: number) => api.get(`/upload/files/${fileId}/status`),
   getFileMetadata: (fileId: number) => api.get(`/upload/files/${fileId}/metadata`),
   deleteFile: (fileId: number) => api.delete(`/upload/files/${fileId}`),
 };
