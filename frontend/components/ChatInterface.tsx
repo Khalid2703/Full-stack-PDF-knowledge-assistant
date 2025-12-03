@@ -179,14 +179,34 @@ export default function ChatInterface() {
 
       const response = await chatAPI.sendMessageV2(payload);
 
-      if (response.data) {
+      console.log('🔍 Full API Response:', response);
+      console.log('🔍 Response Data:', response.data);
+
+      if (response && response.data) {
+        const data = response.data;
+        
+        // Extract answer with multiple fallbacks
+        const answerText = data.message || data.answer || data.response || data.content || '';
+        
+        if (!answerText) {
+          console.error('❌ No answer text found in response:', data);
+          throw new Error('No answer received from server');
+        }
+        
         const assistantMessage = {
           role: 'assistant' as const,
-          content: response.data.answer || response.data.response || 'No response',
-          sources: response.data.sources || [],
+          content: answerText,
+          sources: Array.isArray(data.sources) ? data.sources : [],
           timestamp: new Date().toISOString(),
         };
+        
+        console.log('✅ Adding assistant message:', assistantMessage);
         addMessage(assistantMessage);
+        
+        // Force scroll after message is added
+        setTimeout(() => scrollToBottom(), 100);
+      } else {
+        throw new Error('Invalid response structure from server');
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Failed to send message';
