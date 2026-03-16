@@ -1,6 +1,4 @@
-Here’s a **more polished, professional, and GitHub-ready version** of your README section. I kept your content but improved **clarity, structure, and wording** so it looks stronger to recruiters and reviewers.
 
----
 
 # Regnova – Full-Stack PDF Knowledge Assistant
 
